@@ -14,12 +14,7 @@ import (
 
 type (
 	Fetcher interface {
-		HMFetch(ctx context.Context, conn redis.Conn, key string, scannable interface{}, recompute Recomputer) error
-		Fetch(ctx context.Context, conn redis.Conn, readCmd, writeCmd, key string, scannable interface{}, recompute Recomputer) error
-	}
-
-	Scannable interface {
-		Scan() error
+		Fetch(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable, recompute Recomputer) error
 	}
 
 	Recomputer func(ctx context.Context) (interface{}, error)
@@ -48,24 +43,20 @@ func NewFetcherWithRandomizer(ttl time.Duration, beta float64, randomizer Random
 	}
 }
 
-func (f fetcher) HMFetch(ctx context.Context, conn redis.Conn, key string, scannable interface{}, recompute Recomputer) error {
-	return f.Fetch(ctx, conn, "HGETALL", "HMSET", key, scannable, recompute)
-}
-
-func (f fetcher) Fetch(ctx context.Context, conn redis.Conn, readCmd, writeCmd, key string, scannable interface{}, recompute Recomputer) error {
-	delta, ttl, err := f.cacheRead(ctx, conn, readCmd, key, scannable)
+func (f fetcher) Fetch(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable, recompute Recomputer) error {
+	delta, ttl, err := f.cacheRead(ctx, conn, key, fetchable)
 	if err != nil {
 		return errors.Wrap(err, "reading from cache")
 	}
 
 	if f.shouldRefresh(delta, ttl) {
-		return f.refreshCache(ctx, conn, writeCmd, key, scannable, recompute)
+		return f.refreshCache(ctx, conn, key, fetchable, recompute)
 	}
 
 	return nil
 }
 
-func (f fetcher) refreshCache(ctx context.Context, conn redis.Conn, cmd, key string, scannable interface{}, recompute Recomputer) error {
+func (f fetcher) refreshCache(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable, recompute Recomputer) error {
 	start := time.Now()
 	value, err := recompute(ctx)
 	if err != nil {
@@ -73,12 +64,12 @@ func (f fetcher) refreshCache(ctx context.Context, conn redis.Conn, cmd, key str
 	}
 	delta := time.Since(start).Seconds()
 
-	err = copier.Copy(scannable, value)
+	err = copier.Copy(fetchable.Value(), value)
 	if err != nil {
-		return errors.Wrap(err, "copying recomputed value to scannable")
+		return errors.Wrap(err, "copying recomputed value to fetchable")
 	}
 
-	err = conn.Send(cmd, redis.Args{key}.AddFlat(value)...)
+	err = conn.Send(fetchable.WriteCmd(), redis.Args{key}.AddFlat(value)...)
 	if err != nil {
 		return errors.Wrap(err, "sending write command")
 	}
@@ -101,7 +92,7 @@ func (f fetcher) refreshCache(ctx context.Context, conn redis.Conn, cmd, key str
 	return nil
 }
 
-func (f fetcher) cacheRead(ctx context.Context, conn redis.Conn, cmd, key string, scannable interface{}) (float64, float64, error) {
+func (f fetcher) cacheRead(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable) (float64, float64, error) {
 	err := conn.Send("PTTL", key) // PTTL returns the time-to-live in milliseconds
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "sending pttl")
@@ -113,7 +104,7 @@ func (f fetcher) cacheRead(ctx context.Context, conn redis.Conn, cmd, key string
 		return 0, 0, errors.Wrap(err, "sending get delta key")
 	}
 
-	err = conn.Send(cmd, key)
+	err = conn.Send(fetchable.ReadCmd(), key)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "sending read command")
 	}
@@ -146,7 +137,7 @@ func (f fetcher) cacheRead(ctx context.Context, conn redis.Conn, cmd, key string
 		return 0, 0, nil
 	}
 
-	err = redis.ScanStruct(v, scannable)
+	err = fetchable.Scan(v)
 	if err != nil {
 		return delta, 0, errors.Wrap(err, "scanning")
 	}

@@ -62,7 +62,7 @@ func (x *XFetchRedigoSuite) TestNoKeyExistsRecomputeCalled() {
 
 	var scannable arbitraryData
 	key := "TestNoKeyExistsRecomputeCalled"
-	err := fetcher.HMFetch(ctx, x.conn, key, &scannable, recomputer)
+	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&scannable), recomputer)
 	x.NoError(err)
 	x.True(recomputeCalled)
 	x.Equal(arbitraryData{"hello"}, scannable)
@@ -81,7 +81,7 @@ func (x *XFetchRedigoSuite) TestNoKeyExistsRecomputeCalledWithError() {
 
 	var scannable arbitraryData
 	key := "TestNoKeyExistsRecomputeCalledWithError"
-	err := fetcher.HMFetch(ctx, x.conn, key, &scannable, recomputer)
+	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&scannable), recomputer)
 	x.EqualError(err, "recomputing value: bad")
 	x.True(recomputeCalled)
 }
@@ -107,7 +107,7 @@ func (x *XFetchRedigoSuite) TestKeyExistsAndXFetchOutOfMagicZoneLeadsToCacheRead
 	})
 
 	var scannable arbitraryData
-	err = fetcher.HMFetch(ctx, x.conn, key, &scannable, recomputer)
+	err = fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&scannable), recomputer)
 	x.NoError(err)
 	x.False(recomputeCalled)
 	x.Equal(arbitraryData{"hello"}, scannable)
@@ -134,7 +134,7 @@ func (x *XFetchRedigoSuite) TestKeyExistsAndXFetchInMagicZoneLeadsToRecomputatio
 	})
 
 	var scannable arbitraryData
-	err = fetcher.HMFetch(ctx, x.conn, key, &scannable, recomputer)
+	err = fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&scannable), recomputer)
 	x.NoError(err)
 	x.True(recomputeCalled)
 	x.Equal(arbitraryData{"hello again"}, scannable)
