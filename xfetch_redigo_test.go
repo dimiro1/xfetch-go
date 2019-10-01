@@ -60,12 +60,12 @@ func (x *XFetchRedigoSuite) TestNoKeyExistsRecomputeCalled() {
 		return 0.001
 	})
 
-	var scannable arbitraryData
+	var data arbitraryData
 	key := "TestNoKeyExistsRecomputeCalled"
-	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&scannable), recomputer)
+	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
 	x.NoError(err)
 	x.True(recomputeCalled)
-	x.Equal(arbitraryData{"hello"}, scannable)
+	x.Equal(arbitraryData{"hello"}, data)
 }
 
 func (x *XFetchRedigoSuite) TestNoKeyExistsReturnsErrOnRedisFailure() {
@@ -80,9 +80,9 @@ func (x *XFetchRedigoSuite) TestNoKeyExistsReturnsErrOnRedisFailure() {
 		return 0.001
 	})
 
-	var scannable arbitraryData
+	var data arbitraryData
 	key := "TestNoKeyExistsRecomputeCalled"
-	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&scannable), recomputer)
+	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
 	x.Assert().Error(err)
 	x.Assert().Contains(err.Error(), "network connection")
 	x.False(recomputeCalled)
@@ -99,9 +99,9 @@ func (x *XFetchRedigoSuite) TestRefreshingErrorsOnNonPointerType() {
 		return 0.001
 	})
 
-	var scannable arbitraryData
+	var data arbitraryData
 	key := "TestNoKeyExistsRecomputeCalledWithError"
-	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(scannable), recomputer)
+	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(data), recomputer)
 	x.EqualError(err, "copying recomputed value to fetchable: copy to value is unaddressable")
 	x.True(recomputeCalled)
 }
@@ -117,9 +117,9 @@ func (x *XFetchRedigoSuite) TestNoKeyExistsRecomputeCalledWithError() {
 		return 0.001
 	})
 
-	var scannable arbitraryData
+	var data arbitraryData
 	key := "TestNoKeyExistsRecomputeCalledWithError"
-	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&scannable), recomputer)
+	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
 	x.EqualError(err, "recomputing value: bad")
 	x.True(recomputeCalled)
 }
@@ -144,11 +144,11 @@ func (x *XFetchRedigoSuite) TestKeyExistsAndXFetchOutOfMagicZoneLeadsToCacheRead
 		return 0.001
 	})
 
-	var scannable arbitraryData
-	err = fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&scannable), recomputer)
+	var data arbitraryData
+	err = fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
 	x.NoError(err)
 	x.False(recomputeCalled)
-	x.Equal(arbitraryData{"hello"}, scannable)
+	x.Equal(arbitraryData{"hello"}, data)
 }
 
 func (x *XFetchRedigoSuite) TestKeyExistsAndXFetchInMagicZoneLeadsToRecomputation() {
@@ -171,9 +171,9 @@ func (x *XFetchRedigoSuite) TestKeyExistsAndXFetchInMagicZoneLeadsToRecomputatio
 		return 0.9
 	})
 
-	var scannable arbitraryData
-	err = fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&scannable), recomputer)
+	var data arbitraryData
+	err = fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
 	x.NoError(err)
 	x.True(recomputeCalled)
-	x.Equal(arbitraryData{"hello again"}, scannable)
+	x.Equal(arbitraryData{"hello again"}, data)
 }

@@ -12,12 +12,21 @@ import (
 	"github.com/pkg/errors"
 )
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 type (
+	// Fetcher reads the value of a given key from a cache and decides whether to recompute it.
 	Fetcher interface {
 		Fetch(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable, recompute Recomputer) error
 	}
 
+	// Recomputer is a function called on the event of a cache miss or an early fetch. The first value should be
+	// the object to be cached or assigned to the value wrapped in a Fetchable.
 	Recomputer func(ctx context.Context) (interface{}, error)
+
+	// Randomizer returns a random float between 0 and 1.
 	Randomizer func() float64
 
 	fetcher struct {
@@ -27,6 +36,7 @@ type (
 	}
 )
 
+// NewFetcher takes the ttl of a cache key and its beta value and returns a Fetcher, using rand.Float64 as a randomizer
 func NewFetcher(ttl time.Duration, beta float64) Fetcher {
 	return fetcher{
 		ttl:        ttl,
@@ -35,6 +45,7 @@ func NewFetcher(ttl time.Duration, beta float64) Fetcher {
 	}
 }
 
+// NewFetcher takes the ttl of a cache key, its beta value and a Randomizer and returns a Fetcher
 func NewFetcherWithRandomizer(ttl time.Duration, beta float64, randomizer Randomizer) Fetcher {
 	return fetcher{
 		ttl:        ttl,
