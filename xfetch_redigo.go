@@ -12,23 +12,40 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Fetcher interface {
-	HMFetch(ctx context.Context, conn redis.Conn, key string, scannable interface{}, recompute Recomputer) error
-	Fetch(ctx context.Context, conn redis.Conn, readCmd, writeCmd, key string, scannable interface{}, recompute Recomputer) error
-}
+type (
+	Fetcher interface {
+		HMFetch(ctx context.Context, conn redis.Conn, key string, scannable interface{}, recompute Recomputer) error
+		Fetch(ctx context.Context, conn redis.Conn, readCmd, writeCmd, key string, scannable interface{}, recompute Recomputer) error
+	}
 
-type Recomputer func(ctx context.Context) (interface{}, error)
+	Scannable interface {
+		Scan() error
+	}
+
+	Recomputer func(ctx context.Context) (interface{}, error)
+	Randomizer func() float64
+
+	fetcher struct {
+		ttl        time.Duration
+		beta       float64 // a constant. the higher it is the more likely an earlier computation
+		randomizer func() float64
+	}
+)
 
 func NewFetcher(ttl time.Duration, beta float64) Fetcher {
 	return fetcher{
-		ttl:  ttl,
-		beta: beta,
+		ttl:        ttl,
+		beta:       beta,
+		randomizer: rand.Float64,
 	}
 }
 
-type fetcher struct {
-	ttl  time.Duration
-	beta float64 // a constant. the higher it is the more likely an earlier computation
+func NewFetcherWithRandomizer(ttl time.Duration, beta float64, randomizer Randomizer) Fetcher {
+	return fetcher{
+		ttl:        ttl,
+		beta:       beta,
+		randomizer: randomizer,
+	}
 }
 
 func (f fetcher) HMFetch(ctx context.Context, conn redis.Conn, key string, scannable interface{}, recompute Recomputer) error {
@@ -41,7 +58,7 @@ func (f fetcher) Fetch(ctx context.Context, conn redis.Conn, readCmd, writeCmd, 
 		return errors.Wrap(err, "reading from cache")
 	}
 
-	if shouldRefresh(delta, f.beta, ttl) {
+	if f.shouldRefresh(delta, ttl) {
 		return f.refreshCache(ctx, conn, writeCmd, key, scannable, recompute)
 	}
 
@@ -145,6 +162,6 @@ func (f fetcher) cacheRead(ctx context.Context, conn redis.Conn, cmd, key string
 // -> x is the ttl
 //
 // N.B. A cache miss would have ttl <= 0, so this will always return true
-func shouldRefresh(delta, beta, ttl float64) bool {
-	return -(delta * beta * math.Log(rand.Float64())) >= ttl
+func (f fetcher) shouldRefresh(delta, ttl float64) bool {
+	return -(delta * f.beta * math.Log(f.randomizer())) >= ttl
 }
