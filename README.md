@@ -19,8 +19,11 @@ The probability that a cache value will be recomputed increases the closer we ge
 I've created a graph here: https://www.desmos.com/calculator/bkjyyz3zlp . It visualizes the probability of recomputing the value of a single key the closer we get to the TTL. 
 
 `a`: the time it took to compute the last value (called `delta`)
+
 `b`: a constant which one can tweak to have earlier or later re-computation. The higher it is the earlier the computation will be.
+
 `y`: The probability of computation 
+
 `d`: The TTL (in the graph, 10 seconds)
 
 You can tweak these values to visualize how the algorithm behaves in different scenarios.
