@@ -68,6 +68,44 @@ func (x *XFetchRedigoSuite) TestNoKeyExistsRecomputeCalled() {
 	x.Equal(arbitraryData{"hello"}, scannable)
 }
 
+func (x *XFetchRedigoSuite) TestNoKeyExistsReturnsErrOnRedisFailure() {
+	x.conn.Close()
+	var recomputeCalled bool
+	recomputer := func(_ context.Context) (interface{}, error) {
+		recomputeCalled = true
+		return arbitraryData{"hello"}, nil
+	}
+
+	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, func() float64 {
+		return 0.001
+	})
+
+	var scannable arbitraryData
+	key := "TestNoKeyExistsRecomputeCalled"
+	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&scannable), recomputer)
+	x.Assert().Error(err)
+	x.Assert().Contains(err.Error(), "network connection")
+	x.False(recomputeCalled)
+}
+
+func (x *XFetchRedigoSuite) TestRefreshingErrorsOnNonPointerType() {
+	var recomputeCalled bool
+	recomputer := func(_ context.Context) (interface{}, error) {
+		recomputeCalled = true
+		return arbitraryData{"foo"}, nil
+	}
+
+	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, func() float64 {
+		return 0.001
+	})
+
+	var scannable arbitraryData
+	key := "TestNoKeyExistsRecomputeCalledWithError"
+	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(scannable), recomputer)
+	x.EqualError(err, "copying recomputed value to fetchable: copy to value is unaddressable")
+	x.True(recomputeCalled)
+}
+
 func (x *XFetchRedigoSuite) TestNoKeyExistsRecomputeCalledWithError() {
 	var recomputeCalled bool
 	recomputer := func(_ context.Context) (interface{}, error) {
