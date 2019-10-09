@@ -56,19 +56,20 @@ func (x *XFetchRedigoSuite) TestNoKeyExistsRecomputeCalled() {
 		return arbitraryData{"hello"}, nil
 	}
 
-	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, func() float64 {
+	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, true, func() float64 {
 		return 0.001
 	})
 
 	var data arbitraryData
 	key := "TestNoKeyExistsRecomputeCalled"
-	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	retrieved, err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	x.True(retrieved)
 	x.NoError(err)
 	x.True(recomputeCalled)
 	x.Equal(arbitraryData{"hello"}, data)
 }
 
-func (x *XFetchRedigoSuite) TestNoKeyExistsReturnsErrOnRedisFailure() {
+func (x *XFetchRedigoSuite) TestNoKeyExistsRecomputesIfRecomputeSetToTrue() {
 	x.conn.Close()
 	var recomputeCalled bool
 	recomputer := func(_ context.Context) (interface{}, error) {
@@ -76,13 +77,35 @@ func (x *XFetchRedigoSuite) TestNoKeyExistsReturnsErrOnRedisFailure() {
 		return arbitraryData{"hello"}, nil
 	}
 
-	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, func() float64 {
+	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, true, func() float64 {
 		return 0.001
 	})
 
 	var data arbitraryData
 	key := "TestNoKeyExistsRecomputeCalled"
-	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	retrieved, err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	x.True(retrieved)
+	x.Assert().Error(err)
+	x.Assert().Contains(err.Error(), "network connection")
+	x.True(recomputeCalled)
+}
+
+func (x *XFetchRedigoSuite) TestNoKeyExistsReturnsErrOnRedisFailureIfRecomputeSetToFalse() {
+	x.conn.Close()
+	var recomputeCalled bool
+	recomputer := func(_ context.Context) (interface{}, error) {
+		recomputeCalled = true
+		return arbitraryData{"hello"}, nil
+	}
+
+	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, false, func() float64 {
+		return 0.001
+	})
+
+	var data arbitraryData
+	key := "TestNoKeyExistsRecomputeCalled"
+	retrieved, err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	x.False(retrieved)
 	x.Assert().Error(err)
 	x.Assert().Contains(err.Error(), "network connection")
 	x.False(recomputeCalled)
@@ -95,13 +118,14 @@ func (x *XFetchRedigoSuite) TestRefreshingErrorsOnNonPointerType() {
 		return arbitraryData{"foo"}, nil
 	}
 
-	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, func() float64 {
+	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, true, func() float64 {
 		return 0.001
 	})
 
 	var data arbitraryData
 	key := "TestNoKeyExistsRecomputeCalledWithError"
-	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(data), recomputer)
+	retrieved, err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(data), recomputer)
+	x.False(retrieved)
 	x.EqualError(err, "copying recomputed value to fetchable: copy to value is unaddressable")
 	x.True(recomputeCalled)
 }
@@ -113,13 +137,14 @@ func (x *XFetchRedigoSuite) TestNoKeyExistsRecomputeCalledWithError() {
 		return nil, errors.New("bad")
 	}
 
-	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, func() float64 {
+	fetcher := xfredigo.NewFetcherWithRandomizer(10*time.Second, 1, true, func() float64 {
 		return 0.001
 	})
 
 	var data arbitraryData
 	key := "TestNoKeyExistsRecomputeCalledWithError"
-	err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	retrieved, err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	x.False(retrieved)
 	x.EqualError(err, "recomputing value: bad")
 	x.True(recomputeCalled)
 }
@@ -140,12 +165,13 @@ func (x *XFetchRedigoSuite) TestKeyExistsAndXFetchOutOfMagicZoneLeadsToCacheRead
 		return &arbitraryData{"hello again"}, nil
 	}
 
-	fetcher := xfredigo.NewFetcherWithRandomizer(ttl, 1, func() float64 {
+	fetcher := xfredigo.NewFetcherWithRandomizer(ttl, 1, true, func() float64 {
 		return 0.001
 	})
 
 	var data arbitraryData
-	err = fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	retrieved, err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	x.True(retrieved)
 	x.NoError(err)
 	x.False(recomputeCalled)
 	x.Equal(arbitraryData{"hello"}, data)
@@ -167,12 +193,13 @@ func (x *XFetchRedigoSuite) TestKeyExistsAndXFetchInMagicZoneLeadsToRecomputatio
 		return &arbitraryData{"hello again"}, nil
 	}
 
-	fetcher := xfredigo.NewFetcherWithRandomizer(ttl, 1, func() float64 {
+	fetcher := xfredigo.NewFetcherWithRandomizer(ttl, 1, true, func() float64 {
 		return 0.9
 	})
 
 	var data arbitraryData
-	err = fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	retrieved, err := fetcher.Fetch(ctx, x.conn, key, xfredigo.Struct(&data), recomputer)
+	x.True(retrieved)
 	x.NoError(err)
 	x.True(recomputeCalled)
 	x.Equal(arbitraryData{"hello again"}, data)

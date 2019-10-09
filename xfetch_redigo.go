@@ -18,8 +18,9 @@ func init() {
 
 type (
 	// Fetcher reads the value of a given key from a cache and decides whether to recompute it.
+	// It returns whether a value has been retrieved (bool) and an error.
 	Fetcher interface {
-		Fetch(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable, recompute Recomputer) error
+		Fetch(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable, recompute Recomputer) (bool, error)
 	}
 
 	// Recomputer is a function called on the event of a cache miss or an early fetch. The first value should be
@@ -30,77 +31,83 @@ type (
 	Randomizer func() float64
 
 	fetcher struct {
-		ttl        time.Duration
-		beta       float64 // a constant. the higher it is the more likely an earlier computation
-		randomizer func() float64
+		ttl                     time.Duration
+		beta                    float64 // a constant. the higher it is the more likely an earlier computation
+		randomizer              func() float64
+		recomputeOnCacheFailure bool
 	}
 )
 
 // NewFetcher takes the ttl of a cache key and its beta value and returns a Fetcher, using rand.Float64 as a randomizer
-func NewFetcher(ttl time.Duration, beta float64) Fetcher {
+func NewFetcher(ttl time.Duration, beta float64, recomputeOnCacheFailure bool) Fetcher {
 	return fetcher{
-		ttl:        ttl,
-		beta:       beta,
-		randomizer: rand.Float64,
+		ttl:                     ttl,
+		beta:                    beta,
+		randomizer:              rand.Float64,
+		recomputeOnCacheFailure: recomputeOnCacheFailure,
 	}
 }
 
 // NewFetcher takes the ttl of a cache key, its beta value and a Randomizer and returns a Fetcher
-func NewFetcherWithRandomizer(ttl time.Duration, beta float64, randomizer Randomizer) Fetcher {
+func NewFetcherWithRandomizer(ttl time.Duration, beta float64, recomputeOnCacheFailure bool, randomizer Randomizer) Fetcher {
 	return fetcher{
-		ttl:        ttl,
-		beta:       beta,
-		randomizer: randomizer,
+		ttl:                     ttl,
+		beta:                    beta,
+		randomizer:              randomizer,
+		recomputeOnCacheFailure: recomputeOnCacheFailure,
 	}
 }
 
-func (f fetcher) Fetch(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable, recompute Recomputer) error {
+func (f fetcher) Fetch(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable, recompute Recomputer) (bool, error) {
 	delta, ttl, err := f.cacheRead(ctx, conn, key, fetchable)
 	if err != nil {
-		return errors.Wrap(err, "reading from cache")
+		if f.recomputeOnCacheFailure {
+			return f.refreshCache(ctx, conn, key, fetchable, recompute)
+		}
+		return false, errors.Wrap(err, "reading from cache")
 	}
 
 	if f.shouldRefresh(delta, ttl) {
 		return f.refreshCache(ctx, conn, key, fetchable, recompute)
 	}
 
-	return nil
+	return true, nil
 }
 
-func (f fetcher) refreshCache(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable, recompute Recomputer) error {
+func (f fetcher) refreshCache(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable, recompute Recomputer) (bool, error) {
 	start := time.Now()
 	value, err := recompute(ctx)
 	if err != nil {
-		return errors.Wrap(err, "recomputing value")
+		return false, errors.Wrap(err, "recomputing value")
 	}
 	delta := time.Since(start).Seconds()
 
 	err = copier.Copy(fetchable.Value(), value)
 	if err != nil {
-		return errors.Wrap(err, "copying recomputed value to fetchable")
+		return false, errors.Wrap(err, "copying recomputed value to fetchable")
 	}
 
 	err = conn.Send(fetchable.WriteCmd(), redis.Args{key}.AddFlat(value)...)
 	if err != nil {
-		return errors.Wrap(err, "sending write command")
+		return true, errors.Wrap(err, "sending write command")
 	}
 
 	err = conn.Send("EXPIRE", key, f.ttl.Seconds())
 	if err != nil {
-		return errors.Wrap(err, "sending expire")
+		return true, errors.Wrap(err, "sending expire")
 	}
 
 	deltaKey := fmt.Sprintf("%s:delta", key)
 	err = conn.Send("SET", deltaKey, delta, "EX", f.ttl.Seconds())
 	if err != nil {
-		return errors.Wrap(err, "setting delta key")
+		return true, errors.Wrap(err, "setting delta key")
 	}
 	err = conn.Flush()
 	if err != nil {
-		return errors.Wrap(err, "sending flushing conn")
+		return true, errors.Wrap(err, "sending flushing conn")
 	}
 
-	return nil
+	return true, nil
 }
 
 func (f fetcher) cacheRead(ctx context.Context, conn redis.Conn, key string, fetchable Fetchable) (float64, float64, error) {

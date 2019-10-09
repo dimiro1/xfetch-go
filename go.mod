@@ -1,7 +1,5 @@
 module github.com/motain/xfetch-redigo
 
-go 1.13
-
 require (
 	github.com/alicebob/miniredis/v2 v2.10.0
 	github.com/garyburd/redigo v1.6.0
