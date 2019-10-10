@@ -13,6 +13,7 @@ type cache struct {
 	conn redis.Conn
 }
 
+// Wrap wraps a redigo Conn and allows it to implement the Cache interface
 func Wrap(conn redis.Conn) xf.Cache {
 	return cache{conn: conn}
 }

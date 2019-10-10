@@ -14,6 +14,7 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+// Mockable time.Since function for tests
 var Since = func(t time.Time) time.Duration {
 	return time.Since(t)
 }
@@ -22,7 +23,15 @@ type (
 	// Cache abstracts away cache operations. You can use any kind of cache
 	// or caching library to implement it.
 	Cache interface {
+		// Update does the following:
+		// 	- Serializes the fetchable into something that can be passed to a cache
+		//	- Writes the fetchable and sets its ttl to the parameter ttl in seconds
+		//  - Writes a delta to the cache
 		Update(key string, ttl time.Duration, delta float64, fetchable Fetchable) error
+
+		// Read does the following:
+		//	- Reads the fetchable at `key`, as well as its TTL
+		//	- Reads the delta key
 		Read(key string, fetchable Fetchable) (delta float64, ttl float64, err error)
 	}
 
