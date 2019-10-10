@@ -41,7 +41,7 @@ type (
 		Fetch(ctx context.Context, cache Cache, key string, fetchable Fetchable, recompute Recomputer) (bool, error)
 	}
 
-	// Fetchable is an object that can be fetched from the cache.
+	// Fetchable is an object that can be written to or fetched from the cache.
 	Fetchable interface {
 		Serialize() ([]interface{}, error)   // Serialize returns the object serialized as a list of arguments
 		Deserialize(reply interface{}) error // Deserialize is a function called when scanning from the cache
