@@ -52,6 +52,7 @@ type (
 
 	// Recomputer is a function called on the event of a cache miss or an early fetch. The first value should be
 	// the object to be cached or assigned to the value wrapped in a Fetchable.
+	// It also returns the ttl of the item.
 	Recomputer func(ctx context.Context) (Fetchable, time.Duration, error)
 
 	// Randomizer returns a random float between 0 and 1.
