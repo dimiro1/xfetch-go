@@ -1,4 +1,4 @@
-# XFetch-Redigo
+# XFetch Go
 
 A library for mitigating cache stampedes with the XFetch algorithm.
 
@@ -35,6 +35,8 @@ You can tweak these values to visualize how the algorithm behaves in different s
 
 ## Usage
 
+### With Redigo
+
 ```go
 type arbitraryData struct {
 	Something string `redis:"something"`
@@ -42,21 +44,26 @@ type arbitraryData struct {
 
 conn, err := redis.Dial("tcp", x.server.Addr())
 if err != nil {
-    // woops
-    return
+    // handle error
 }
 defer conn.Close()
 
-ttl := 10*time.Second
 beta := 1.0
-fetcher := xfredigo.NewFetcher(ttl, beta)
+recomputeOnCacheFailure := true
+fetcher := xf.NewFetcher(beta, recomputeOnCacheFailure)
 
 var data arbitraryData
-err := fetcher.Fetch(ctx, conn, key, xfredigo.Struct(&data), recomputer)
+err := fetcher.Fetch(ctx, xf.Wrap(conn), key, xfredigo.Struct(&data), recomputer)
 if err != nil {
-    // do something
-    return
+    // handle error
 }
 
 fmt.Println(data.Something)
 ```
+
+### With other caches/libraries
+
+Any caching library that implements the `Cache` and `Fetchable` interfaces can be used with this library.
+
+Feel free to send a pull-request if you would like to use this library
+with any other cache or caching library.
