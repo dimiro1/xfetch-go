@@ -27,7 +27,7 @@ func TestXFetchSuite(t *testing.T) {
 type XFetchSuite struct {
 	suite.Suite
 
-	client            *mocks.Client
+	cache             *mocks.Cache
 	fetchedString     string
 	fetchable         stringFetchable
 	computedFetchable stringFetchable
@@ -35,7 +35,7 @@ type XFetchSuite struct {
 }
 
 func (s *XFetchSuite) SetupTest() {
-	s.client = &mocks.Client{}
+	s.cache = &mocks.Cache{}
 	s.fetchable = newStringFetchable(&s.fetchedString)
 	s.computedFetchable = newStringFetchable(func() *string { s := "computed"; return &s }())
 
@@ -43,7 +43,7 @@ func (s *XFetchSuite) SetupTest() {
 }
 
 func (s *XFetchSuite) TearDownTest() {
-	s.client.AssertExpectations(s.T())
+	s.cache.AssertExpectations(s.T())
 	xf.Since = s.previousSince
 	s.fetchedString = ""
 }
@@ -57,7 +57,7 @@ func (s *XFetchSuite) TestErrReturnedIfFetchableUnderlyingIsNil() {
 		return s.computedFetchable, ttl, nil
 	}
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, nullFetchable{}, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, nullFetchable{}, recomputer)
 	s.Assert().False(retrieved)
 	s.Assert().False(recomputeCalled)
 	s.Assert().EqualError(err, "fetchable's underlying value must be a non-nil pointer")
@@ -72,7 +72,7 @@ func (s *XFetchSuite) TestErrReturnedIfFetchableUnderlyingIsNotPointer() {
 		return s.computedFetchable, ttl, nil
 	}
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, nonPointerFetchable{}, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, nonPointerFetchable{}, recomputer)
 	s.Assert().False(retrieved)
 	s.Assert().False(recomputeCalled)
 	s.Assert().EqualError(err, "fetchable's underlying value must be a non-nil pointer")
@@ -87,10 +87,10 @@ func (s *XFetchSuite) TestFetchReturnsReadErrIfRecomputeOnCacheFailureFalse() {
 		return s.computedFetchable, ttl, nil
 	}
 
-	s.client.On("Read", key, s.fetchable).
+	s.cache.On("Read", key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad"))
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, s.fetchable, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
 	s.Assert().False(retrieved)
 	s.Assert().False(recomputeCalled)
 	s.Assert().EqualError(err, "reading from cache: bad")
@@ -109,12 +109,12 @@ func (s *XFetchSuite) TestFetchRecomputesIfRecomputeOnCacheFailureTrue() {
 		return time.Second
 	}
 
-	s.client.On("Read", key, s.fetchable).
+	s.cache.On("Read", key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad")).
 		On("Update", key, ttl, 1.0, s.fetchable).
 		Return(nil)
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, s.fetchable, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
 	s.Assert().True(retrieved)
 	s.Assert().True(recomputeCalled)
 	s.Assert().EqualError(err, "reading from cache: bad")
@@ -134,10 +134,10 @@ func (s *XFetchSuite) TestRecomputeErrReturnedIfRecomputeOnCacheFailureTrueAndCa
 		return time.Second
 	}
 
-	s.client.On("Read", key, s.fetchable).
+	s.cache.On("Read", key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad"))
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, s.fetchable, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
 	s.Assert().False(retrieved)
 	s.Assert().True(recomputeCalled)
 	s.Assert().EqualError(err, "refreshing after cache failure: recomputing value: bad")
@@ -157,10 +157,10 @@ func (s *XFetchSuite) TestRecomputeNilErrReturnedIfRecomputeOnCacheFailureTrueAn
 		return time.Second
 	}
 
-	s.client.On("Read", key, s.fetchable).
+	s.cache.On("Read", key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad"))
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, s.fetchable, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
 	s.Assert().False(retrieved)
 	s.Assert().True(recomputeCalled)
 	s.Assert().EqualError(err, "refreshing after cache failure: nil returned from recomputation")
@@ -180,10 +180,10 @@ func (s *XFetchSuite) TestRecomputeCopyErrReturnedIfRecomputeOnCacheFailureTrueA
 		return time.Second
 	}
 
-	s.client.On("Read", key, s.fetchable).
+	s.cache.On("Read", key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad"))
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, s.fetchable, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
 	s.Assert().False(retrieved)
 	s.Assert().True(recomputeCalled)
 	s.Assert().EqualError(err, "refreshing after cache failure: fetchable type *string is not assignable to recomputed type *int")
@@ -203,12 +203,12 @@ func (s *XFetchSuite) TestRecomputeUpdateErrReturnedIfRecomputeOnCacheFailureTru
 		return time.Second
 	}
 
-	s.client.On("Read", key, s.fetchable).
+	s.cache.On("Read", key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad")).
 		On("Update", key, ttl, 1.0, s.fetchable).
 		Return(errors.New("bad"))
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, s.fetchable, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
 	s.Assert().False(retrieved)
 	s.Assert().True(recomputeCalled)
 	s.Assert().EqualError(err, "refreshing after cache failure: updating cache: bad")
@@ -228,14 +228,14 @@ func (s *XFetchSuite) TestCacheRead() {
 		return time.Second
 	}
 
-	s.client.On("Read", key, s.fetchable).
+	s.cache.On("Read", key, s.fetchable).
 		Return(1.0, 7200.0, nil).
 		Run(func(args mock.Arguments) {
 			f := args.Get(1).(stringFetchable)
 			*f.v = "read"
 		})
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, s.fetchable, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
 	s.Assert().True(retrieved)
 	s.Assert().False(recomputeCalled)
 	s.Assert().Nil(err)
@@ -255,7 +255,7 @@ func (s *XFetchSuite) TestCacheMissUpdateErr() {
 		return time.Second
 	}
 
-	s.client.On("Read", key, s.fetchable).
+	s.cache.On("Read", key, s.fetchable).
 		Return(1.0, 0.0, nil).
 		Run(func(args mock.Arguments) {
 			f := args.Get(1).(stringFetchable)
@@ -264,7 +264,7 @@ func (s *XFetchSuite) TestCacheMissUpdateErr() {
 		On("Update", key, ttl, 1.0, s.fetchable).
 		Return(errors.New("bad"))
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, s.fetchable, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
 	s.Assert().True(retrieved)
 	s.Assert().True(recomputeCalled)
 	s.Assert().EqualError(err, "updating cache: bad")
@@ -284,7 +284,7 @@ func (s *XFetchSuite) TestCacheMissUpdateSuccess() {
 		return time.Second
 	}
 
-	s.client.On("Read", key, s.fetchable).
+	s.cache.On("Read", key, s.fetchable).
 		Return(1.0, 0.0, nil).
 		Run(func(args mock.Arguments) {
 			f := args.Get(1).(stringFetchable)
@@ -293,7 +293,7 @@ func (s *XFetchSuite) TestCacheMissUpdateSuccess() {
 		On("Update", key, ttl, 1.0, s.fetchable).
 		Return(nil)
 
-	retrieved, err := fetcher.Fetch(ctx, s.client, key, s.fetchable, recomputer)
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
 	s.Assert().True(retrieved)
 	s.Assert().True(recomputeCalled)
 	s.Assert().Nil(err)

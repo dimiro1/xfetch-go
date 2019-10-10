@@ -19,9 +19,9 @@ var Since = func(t time.Time) time.Duration {
 }
 
 type (
-	// Client abstracts away cache operations. You can use any kind of cache
+	// Cache abstracts away cache operations. You can use any kind of cache
 	// or caching library to implement it.
-	Client interface {
+	Cache interface {
 		Update(key string, ttl time.Duration, delta float64, fetchable Fetchable) error
 		Read(key string, fetchable Fetchable) (delta float64, ttl float64, err error)
 	}
@@ -29,7 +29,7 @@ type (
 	// Fetcher reads the value of a given key from a cache and decides whether to recompute it.
 	// It returns whether a value has been retrieved (bool) and an error.
 	Fetcher interface {
-		Fetch(ctx context.Context, client Client, key string, fetchable Fetchable, recompute Recomputer) (bool, error)
+		Fetch(ctx context.Context, cache Cache, key string, fetchable Fetchable, recompute Recomputer) (bool, error)
 	}
 
 	// Fetchable is an object that can be fetched from the cache.
@@ -73,17 +73,17 @@ func NewFetcherWithRandomizer(beta float64, recomputeOnCacheFailure bool, random
 	}
 }
 
-func (f fetcher) Fetch(ctx context.Context, client Client, key string, fetchable Fetchable, recompute Recomputer) (bool, error) {
+func (f fetcher) Fetch(ctx context.Context, cache Cache, key string, fetchable Fetchable, recompute Recomputer) (bool, error) {
 	fetchableValue := reflect.ValueOf(fetchable.Unwrap())
 	if fetchableValue.Kind() != reflect.Ptr || fetchableValue.IsNil() {
 		return false, errors.New("fetchable's underlying value must be a non-nil pointer")
 	}
 
-	delta, ttl, err := client.Read(key, fetchable)
+	delta, ttl, err := cache.Read(key, fetchable)
 	if err != nil {
 		var retrieved bool
 		if f.recomputeOnCacheFailure {
-			_, refreshErr := f.refreshCache(ctx, client, key, fetchable, recompute)
+			_, refreshErr := f.refresh(ctx, cache, key, fetchable, recompute)
 			if refreshErr != nil {
 				return false, errors.Wrap(refreshErr, "refreshing after cache failure")
 			}
@@ -93,13 +93,13 @@ func (f fetcher) Fetch(ctx context.Context, client Client, key string, fetchable
 	}
 
 	if f.shouldRefresh(delta, ttl) {
-		return f.refreshCache(ctx, client, key, fetchable, recompute)
+		return f.refresh(ctx, cache, key, fetchable, recompute)
 	}
 
 	return true, nil
 }
 
-func (f fetcher) refreshCache(ctx context.Context, client Client, key string, fetchable Fetchable, recompute Recomputer) (bool, error) {
+func (f fetcher) refresh(ctx context.Context, cache Cache, key string, fetchable Fetchable, recompute Recomputer) (bool, error) {
 	start := time.Now()
 	recomputed, ttl, err := recompute(ctx)
 	if err != nil {
@@ -115,7 +115,7 @@ func (f fetcher) refreshCache(ctx context.Context, client Client, key string, fe
 		return false, err
 	}
 
-	err = client.Update(key, ttl, delta, fetchable)
+	err = cache.Update(key, ttl, delta, fetchable)
 	if err != nil {
 		return true, errors.Wrap(err, "updating cache")
 	}
