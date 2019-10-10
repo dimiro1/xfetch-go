@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	xf "github.com/motain/xfetch-go"
-	"github.com/motain/xfetch-go/mocks"
+	xf "github.com/Onefootball/xfetch-go"
+	"github.com/Onefootball/xfetch-go/mocks"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 )

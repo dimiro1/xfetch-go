@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
+	xfredigo "github.com/Onefootball/xfetch-go/xf-redigo"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/garyburd/redigo/redis"
-	xfredigo "github.com/motain/xfetch-go/xf-redigo"
 	"github.com/stretchr/testify/suite"
 )
 

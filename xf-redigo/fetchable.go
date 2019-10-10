@@ -5,8 +5,8 @@ import (
 
 	"github.com/vmihailenco/msgpack/v4"
 
+	xf "github.com/Onefootball/xfetch-go"
 	"github.com/garyburd/redigo/redis"
-	xf "github.com/motain/xfetch-go"
 )
 
 type fetchableStruct struct {

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	xf "github.com/Onefootball/xfetch-go"
 	"github.com/garyburd/redigo/redis"
-	xf "github.com/motain/xfetch-go"
 	"github.com/pkg/errors"
 )
 
