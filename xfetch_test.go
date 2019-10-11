@@ -163,7 +163,7 @@ func (s *XFetchSuite) TestRecomputeNilErrReturnedIfRecomputeOnCacheFailureTrueAn
 	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
 	s.Assert().False(retrieved)
 	s.Assert().True(recomputeCalled)
-	s.Assert().EqualError(err, "refreshing after cache failure: nil returned from recomputation")
+	s.Assert().EqualError(err, "reading from cache: bad")
 	s.Assert().Empty(s.fetchedString)
 }
 
@@ -209,7 +209,7 @@ func (s *XFetchSuite) TestRecomputeUpdateErrReturnedIfRecomputeOnCacheFailureTru
 		Return(errors.New("bad"))
 
 	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
-	s.Assert().False(retrieved)
+	s.Assert().True(retrieved)
 	s.Assert().True(recomputeCalled)
 	s.Assert().EqualError(err, "refreshing after cache failure: updating cache: bad")
 	s.Assert().Equal("computed", s.fetchedString)
@@ -269,6 +269,29 @@ func (s *XFetchSuite) TestCacheMissUpdateErr() {
 	s.Assert().True(recomputeCalled)
 	s.Assert().EqualError(err, "updating cache: bad")
 	s.Assert().Equal("computed", s.fetchedString)
+}
+
+func (s *XFetchSuite) TestCacheMissNoValueRecomputedNoError() {
+	fetcher := xf.NewFetcherWithRandomizer(beta, true, fakeRandomizer)
+
+	var recomputeCalled bool
+	recomputer := func(_ context.Context) (xf.Fetchable, time.Duration, error) {
+		recomputeCalled = true
+		return nil, 0, nil
+	}
+
+	xf.Since = func(_ time.Time) time.Duration {
+		return time.Second
+	}
+
+	s.cache.On("Read", ctx, key, s.fetchable).
+		Return(0.0, 0.0, nil)
+
+	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
+	s.Assert().False(retrieved)
+	s.Assert().True(recomputeCalled)
+	s.Assert().NoError(err)
+	s.Assert().Empty(s.fetchedString)
 }
 
 func (s *XFetchSuite) TestCacheMissUpdateSuccess() {

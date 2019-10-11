@@ -93,11 +93,11 @@ func (f fetcher) Fetch(ctx context.Context, cache Cache, key string, fetchable F
 	if err != nil {
 		var retrieved bool
 		if f.recomputeOnCacheFailure {
-			_, refreshErr := f.refresh(ctx, cache, key, fetchable, recompute)
+			var refreshErr error
+			retrieved, refreshErr = f.refresh(ctx, cache, key, fetchable, recompute)
 			if refreshErr != nil {
-				return false, errors.Wrap(refreshErr, "refreshing after cache failure")
+				return retrieved, errors.Wrap(refreshErr, "refreshing after cache failure")
 			}
-			retrieved = true
 		}
 		return retrieved, errors.Wrap(err, "reading from cache")
 	}
@@ -118,7 +118,7 @@ func (f fetcher) refresh(ctx context.Context, cache Cache, key string, fetchable
 	delta := Since(start).Seconds()
 
 	if recomputed == nil {
-		return false, errors.New("nil returned from recomputation")
+		return false, nil
 	}
 
 	if err = assign(fetchable.Unwrap(), recomputed.Unwrap()); err != nil {
