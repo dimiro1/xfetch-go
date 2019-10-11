@@ -1,6 +1,7 @@
 package xfredigo
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -18,7 +19,7 @@ func Wrap(conn redis.Conn) xf.Cache {
 	return cache{conn: conn}
 }
 
-func (c cache) Update(key string, ttl time.Duration, delta float64, fetchable xf.Fetchable) error {
+func (c cache) Update(ctx context.Context, key string, ttl time.Duration, delta float64, fetchable xf.Fetchable) error {
 	serialized, err := fetchable.Serialize()
 	if err != nil {
 		return errors.Wrap(err, "serializing recomputed value")
@@ -53,7 +54,7 @@ func (c cache) Update(key string, ttl time.Duration, delta float64, fetchable xf
 	return nil
 }
 
-func (c cache) Read(key string, fetchable xf.Fetchable) (float64, float64, error) {
+func (c cache) Read(ctx context.Context, key string, fetchable xf.Fetchable) (float64, float64, error) {
 	err := c.conn.Send("PTTL", key) // PTTL returns the time-to-live in milliseconds
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "sending pttl")

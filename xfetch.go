@@ -27,12 +27,12 @@ type (
 		// 	- Serializes the fetchable into something that can be passed to a cache
 		//	- Writes the fetchable and sets its ttl to the parameter ttl in seconds
 		//  - Writes a delta to the cache
-		Update(key string, ttl time.Duration, delta float64, fetchable Fetchable) error
+		Update(ctx context.Context, key string, ttl time.Duration, delta float64, fetchable Fetchable) error
 
 		// Read does the following:
 		//	- Reads the fetchable at `key`, as well as its TTL
 		//	- Reads the delta key
-		Read(key string, fetchable Fetchable) (delta float64, ttl float64, err error)
+		Read(ctx context.Context, key string, fetchable Fetchable) (delta float64, ttl float64, err error)
 	}
 
 	// Fetcher reads the value of a given key from a cache and decides whether to recompute it.
@@ -89,7 +89,7 @@ func (f fetcher) Fetch(ctx context.Context, cache Cache, key string, fetchable F
 		return false, errors.New("fetchable's underlying value must be a non-nil pointer")
 	}
 
-	delta, ttl, err := cache.Read(key, fetchable)
+	delta, ttl, err := cache.Read(ctx, key, fetchable)
 	if err != nil {
 		var retrieved bool
 		if f.recomputeOnCacheFailure {
@@ -125,7 +125,7 @@ func (f fetcher) refresh(ctx context.Context, cache Cache, key string, fetchable
 		return false, err
 	}
 
-	err = cache.Update(key, ttl, delta, fetchable)
+	err = cache.Update(ctx, key, ttl, delta, fetchable)
 	if err != nil {
 		return true, errors.Wrap(err, "updating cache")
 	}

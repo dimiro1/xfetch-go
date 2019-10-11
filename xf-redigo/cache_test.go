@@ -1,6 +1,7 @@
 package xfredigo_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ const (
 	ttl   = 2 * time.Hour
 	delta = 1.0
 )
+
+var ctx = context.Background()
 
 type XFetchRedigoSuite struct {
 	suite.Suite
@@ -56,7 +59,7 @@ func (s *XFetchRedigoSuite) TestUpdateSuccessWithStruct() {
 	cache := xfredigo.Wrap(s.conn)
 
 	data := arbitraryData{"hello"}
-	err := cache.Update(key, ttl, delta, xfredigo.Struct(&data))
+	err := cache.Update(ctx, key, ttl, delta, xfredigo.Struct(&data))
 	s.Assert().NoError(err)
 
 	s.Assert().Equal("hello", s.server.HGet(key, "value"))
@@ -78,7 +81,7 @@ func (s *XFetchRedigoSuite) TestReadSuccessWithStruct() {
 	cache := xfredigo.Wrap(s.conn)
 
 	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(key, xfredigo.Struct(&data))
+	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.Struct(&data))
 	s.Assert().Equal(10.0, lastDelta)
 	s.Assert().Equal(7200.0, remaining)
 	s.Assert().NoError(err)
@@ -89,7 +92,7 @@ func (s *XFetchRedigoSuite) TestReadSuccessWithStructWhenNothingThere() {
 	cache := xfredigo.Wrap(s.conn)
 
 	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(key, xfredigo.Struct(&data))
+	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.Struct(&data))
 	s.Assert().Equal(0.0, lastDelta)
 	s.Assert().Equal(0.0, remaining)
 	s.Assert().NoError(err)
@@ -100,7 +103,7 @@ func (s *XFetchRedigoSuite) TestUpdateSuccessWithJSON() {
 	cache := xfredigo.Wrap(s.conn)
 
 	data := arbitraryData{"hello"}
-	err := cache.Update(key, ttl, delta, xfredigo.JSON(&data))
+	err := cache.Update(ctx, key, ttl, delta, xfredigo.JSON(&data))
 	s.Assert().NoError(err)
 
 	value, err := s.server.Get(key)
@@ -124,7 +127,7 @@ func (s *XFetchRedigoSuite) TestReadSuccessWithJSON() {
 	cache := xfredigo.Wrap(s.conn)
 
 	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(key, xfredigo.JSON(&data))
+	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.JSON(&data))
 	s.Assert().NoError(err)
 	s.Assert().Equal(10.0, lastDelta)
 	s.Assert().Equal(7200.0, remaining)
@@ -134,7 +137,7 @@ func (s *XFetchRedigoSuite) TestReadSuccessWithJSONWhenNothingThere() {
 	cache := xfredigo.Wrap(s.conn)
 
 	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(key, xfredigo.JSON(&data))
+	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.JSON(&data))
 	s.Assert().NoError(err)
 	s.Assert().Equal(0.0, lastDelta)
 	s.Assert().Equal(0.0, remaining)
@@ -145,7 +148,7 @@ func (s *XFetchRedigoSuite) TestUpdateSuccessWithMsgpack() {
 	cache := xfredigo.Wrap(s.conn)
 
 	data := arbitraryData{"hello"}
-	err := cache.Update(key, ttl, delta, xfredigo.Msgpack(&data))
+	err := cache.Update(ctx, key, ttl, delta, xfredigo.Msgpack(&data))
 	s.Assert().NoError(err)
 
 	value, err := s.server.Get(key)
@@ -169,7 +172,7 @@ func (s *XFetchRedigoSuite) TestReadSuccessWithMsgpack() {
 	cache := xfredigo.Wrap(s.conn)
 
 	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(key, xfredigo.Msgpack(&data))
+	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.Msgpack(&data))
 	s.Assert().NoError(err)
 	s.Assert().Equal(10.0, lastDelta)
 	s.Assert().Equal(7200.0, remaining)
@@ -179,7 +182,7 @@ func (s *XFetchRedigoSuite) TestReadSuccessWithMsgpackWhenNothingThere() {
 	cache := xfredigo.Wrap(s.conn)
 
 	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(key, xfredigo.Msgpack(&data))
+	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.Msgpack(&data))
 	s.Assert().NoError(err)
 	s.Assert().Equal(0.0, lastDelta)
 	s.Assert().Equal(0.0, remaining)

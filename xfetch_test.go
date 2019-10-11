@@ -87,7 +87,7 @@ func (s *XFetchSuite) TestFetchReturnsReadErrIfRecomputeOnCacheFailureFalse() {
 		return s.computedFetchable, ttl, nil
 	}
 
-	s.cache.On("Read", key, s.fetchable).
+	s.cache.On("Read", ctx, key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad"))
 
 	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
@@ -109,9 +109,9 @@ func (s *XFetchSuite) TestFetchRecomputesIfRecomputeOnCacheFailureTrue() {
 		return time.Second
 	}
 
-	s.cache.On("Read", key, s.fetchable).
+	s.cache.On("Read", ctx, key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad")).
-		On("Update", key, ttl, 1.0, s.fetchable).
+		On("Update", ctx, key, ttl, 1.0, s.fetchable).
 		Return(nil)
 
 	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
@@ -134,7 +134,7 @@ func (s *XFetchSuite) TestRecomputeErrReturnedIfRecomputeOnCacheFailureTrueAndCa
 		return time.Second
 	}
 
-	s.cache.On("Read", key, s.fetchable).
+	s.cache.On("Read", ctx, key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad"))
 
 	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
@@ -157,7 +157,7 @@ func (s *XFetchSuite) TestRecomputeNilErrReturnedIfRecomputeOnCacheFailureTrueAn
 		return time.Second
 	}
 
-	s.cache.On("Read", key, s.fetchable).
+	s.cache.On("Read", ctx, key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad"))
 
 	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
@@ -180,7 +180,7 @@ func (s *XFetchSuite) TestRecomputeCopyErrReturnedIfRecomputeOnCacheFailureTrueA
 		return time.Second
 	}
 
-	s.cache.On("Read", key, s.fetchable).
+	s.cache.On("Read", ctx, key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad"))
 
 	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
@@ -203,9 +203,9 @@ func (s *XFetchSuite) TestRecomputeUpdateErrReturnedIfRecomputeOnCacheFailureTru
 		return time.Second
 	}
 
-	s.cache.On("Read", key, s.fetchable).
+	s.cache.On("Read", ctx, key, s.fetchable).
 		Return(0.0, 0.0, errors.New("bad")).
-		On("Update", key, ttl, 1.0, s.fetchable).
+		On("Update", ctx, key, ttl, 1.0, s.fetchable).
 		Return(errors.New("bad"))
 
 	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
@@ -228,10 +228,10 @@ func (s *XFetchSuite) TestCacheRead() {
 		return time.Second
 	}
 
-	s.cache.On("Read", key, s.fetchable).
+	s.cache.On("Read", ctx, key, s.fetchable).
 		Return(1.0, 7200.0, nil).
 		Run(func(args mock.Arguments) {
-			f := args.Get(1).(stringFetchable)
+			f := args.Get(2).(stringFetchable)
 			*f.v = "read"
 		})
 
@@ -255,13 +255,13 @@ func (s *XFetchSuite) TestCacheMissUpdateErr() {
 		return time.Second
 	}
 
-	s.cache.On("Read", key, s.fetchable).
+	s.cache.On("Read", ctx, key, s.fetchable).
 		Return(1.0, 0.0, nil).
 		Run(func(args mock.Arguments) {
-			f := args.Get(1).(stringFetchable)
+			f := args.Get(2).(stringFetchable)
 			*f.v = "read"
 		}).
-		On("Update", key, ttl, 1.0, s.fetchable).
+		On("Update", ctx, key, ttl, 1.0, s.fetchable).
 		Return(errors.New("bad"))
 
 	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
@@ -284,13 +284,13 @@ func (s *XFetchSuite) TestCacheMissUpdateSuccess() {
 		return time.Second
 	}
 
-	s.cache.On("Read", key, s.fetchable).
+	s.cache.On("Read", ctx, key, s.fetchable).
 		Return(1.0, 0.0, nil).
 		Run(func(args mock.Arguments) {
-			f := args.Get(1).(stringFetchable)
+			f := args.Get(2).(stringFetchable)
 			*f.v = "read"
 		}).
-		On("Update", key, ttl, 1.0, s.fetchable).
+		On("Update", ctx, key, ttl, 1.0, s.fetchable).
 		Return(nil)
 
 	retrieved, err := fetcher.Fetch(ctx, s.cache, key, s.fetchable, recomputer)
