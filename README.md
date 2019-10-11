@@ -1,6 +1,8 @@
 # XFetch Go
 
-A library for mitigating cache stampedes with the XFetch algorithm.
+[![GoDoc](https://godoc.org/github.com/Onefootball/xfetch-go?status.svg)](https://godoc.org/github.com/Onefootball/xfetch-go)
+
+A library for mitigating against cache stampedes with the XFetch algorithm.
 
 
 ## Background
@@ -12,7 +14,6 @@ Any process reading the cache may recompute the cache value before it expires, w
 This means we don't get a scenario where a value is suddenly expired and every process starts performing an expensive computation.
 
 The probability that a cache value will be recomputed increases the closer we get to the end of the TTL. 
-
 
 ## Visualization
 
@@ -52,8 +53,12 @@ beta := 1.0
 recomputeOnCacheFailure := true
 fetcher := xf.NewFetcher(beta, recomputeOnCacheFailure)
 
+recomputer := func(ctx context.Context) (xf.Fetchable, time.Duration, error) {
+    // ...
+}
+
 var data arbitraryData
-err := fetcher.Fetch(ctx, xf.Wrap(conn), key, xfredigo.Struct(&data), recomputer)
+err := fetcher.Fetch(ctx, xfredigo.Wrap(conn), key, xfredigo.Struct(&data), recomputer)
 if err != nil {
     // handle error
 }
