@@ -12,9 +12,11 @@ import (
 )
 
 const (
-	key   = "some_key"
-	ttl   = 2 * time.Hour
-	delta = 1.0
+	key      = "some_key"
+	ttl      = 2 * time.Hour
+	delta    = time.Second
+	readCmd  = "GET"
+	writeCmd = "SET"
 )
 
 var ctx = context.Background()
@@ -24,10 +26,6 @@ type XFetchRedigoSuite struct {
 
 	server *miniredis.Miniredis
 	conn   redis.Conn
-}
-
-type arbitraryData struct {
-	Value string `redis:"value" json:"value"`
 }
 
 func TestXFetchRedigoSuite(t *testing.T) {
@@ -58,19 +56,20 @@ func (s *XFetchRedigoSuite) TearDownTest() {
 func (s *XFetchRedigoSuite) TestUpdateSuccessWithStruct() {
 	cache := xfredigo.Wrap(s.conn)
 
-	data := arbitraryData{"hello"}
-	err := cache.Update(ctx, key, ttl, delta, xfredigo.Struct(&data))
+	err := cache.Put(ctx, writeCmd, key, ttl, delta, "value")
 	s.Assert().NoError(err)
 
-	s.Assert().Equal("hello", s.server.HGet(key, "value"))
+	getValue, err := s.server.Get(key)
+	s.Require().NoError(err)
+	s.Assert().Equal("value", getValue)
 
 	d, _ := s.server.Get(key + ":delta")
 	s.Assert().Equal("1", d)
 	s.Assert().Equal(ttl, s.server.TTL(key))
 }
 
-func (s *XFetchRedigoSuite) TestReadSuccessWithStruct() {
-	s.server.HSet(key, "value", "hello")
+func (s *XFetchRedigoSuite) TestReadSuccess() {
+	s.server.Set(key, "value")
 	ttl := 2 * time.Hour
 	s.server.SetTTL(key, ttl)
 	deltaKey := key + ":delta"
@@ -80,111 +79,22 @@ func (s *XFetchRedigoSuite) TestReadSuccessWithStruct() {
 
 	cache := xfredigo.Wrap(s.conn)
 
-	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.Struct(&data))
+	val, remaining, lastDelta, err := cache.Get(ctx, readCmd, key)
 	s.Assert().Equal(10.0, lastDelta)
 	s.Assert().Equal(7200.0, remaining)
 	s.Assert().NoError(err)
-	s.Assert().Equal(arbitraryData{"hello"}, data)
+
+	parsedVal, err := redis.String(val, nil)
+	s.Require().NoError(err)
+	s.Assert().Equal("value", parsedVal)
 }
 
 func (s *XFetchRedigoSuite) TestReadSuccessWithStructWhenNothingThere() {
 	cache := xfredigo.Wrap(s.conn)
 
-	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.Struct(&data))
+	val, remaining, lastDelta, err := cache.Get(ctx, readCmd, key)
 	s.Assert().Equal(0.0, lastDelta)
 	s.Assert().Equal(0.0, remaining)
-	s.Assert().NoError(err)
-	s.Assert().Equal(arbitraryData{}, data)
-}
-
-func (s *XFetchRedigoSuite) TestUpdateSuccessWithJSON() {
-	cache := xfredigo.Wrap(s.conn)
-
-	data := arbitraryData{"hello"}
-	err := cache.Update(ctx, key, ttl, delta, xfredigo.JSON(&data))
-	s.Assert().NoError(err)
-
-	value, err := s.server.Get(key)
-	s.Assert().Equal("{\"value\":\"hello\"}", value)
-
-	d, _ := s.server.Get(key + ":delta")
-	s.Assert().Equal("1", d)
-	s.Assert().Equal(ttl, s.server.TTL(key))
-}
-
-func (s *XFetchRedigoSuite) TestReadSuccessWithJSON() {
-	err := s.server.Set(key, "{\"value\":\"hello\"}")
-	s.Require().NoError(err)
-	ttl := 2 * time.Hour
-	s.server.SetTTL(key, ttl)
-	deltaKey := key + ":delta"
-	err = s.server.Set(deltaKey, "10")
-	s.Require().NoError(err)
-	s.server.SetTTL(deltaKey, ttl)
-
-	cache := xfredigo.Wrap(s.conn)
-
-	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.JSON(&data))
-	s.Assert().NoError(err)
-	s.Assert().Equal(10.0, lastDelta)
-	s.Assert().Equal(7200.0, remaining)
-}
-
-func (s *XFetchRedigoSuite) TestReadSuccessWithJSONWhenNothingThere() {
-	cache := xfredigo.Wrap(s.conn)
-
-	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.JSON(&data))
-	s.Assert().NoError(err)
-	s.Assert().Equal(0.0, lastDelta)
-	s.Assert().Equal(0.0, remaining)
-	s.Assert().Equal(arbitraryData{}, data)
-}
-
-func (s *XFetchRedigoSuite) TestUpdateSuccessWithMsgpack() {
-	cache := xfredigo.Wrap(s.conn)
-
-	data := arbitraryData{"hello"}
-	err := cache.Update(ctx, key, ttl, delta, xfredigo.Msgpack(&data))
-	s.Assert().NoError(err)
-
-	value, err := s.server.Get(key)
-	s.Assert().Equal("\x81\xa5Value\xa5hello", value)
-
-	d, _ := s.server.Get(key + ":delta")
-	s.Assert().Equal("1", d)
-	s.Assert().Equal(ttl, s.server.TTL(key))
-}
-
-func (s *XFetchRedigoSuite) TestReadSuccessWithMsgpack() {
-	err := s.server.Set(key, "\x81\xa5Value\xa5hello")
-	s.Require().NoError(err)
-	ttl := 2 * time.Hour
-	s.server.SetTTL(key, ttl)
-	deltaKey := key + ":delta"
-	err = s.server.Set(deltaKey, "10")
-	s.Require().NoError(err)
-	s.server.SetTTL(deltaKey, ttl)
-
-	cache := xfredigo.Wrap(s.conn)
-
-	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.Msgpack(&data))
-	s.Assert().NoError(err)
-	s.Assert().Equal(10.0, lastDelta)
-	s.Assert().Equal(7200.0, remaining)
-}
-
-func (s *XFetchRedigoSuite) TestReadSuccessWithMsgpackWhenNothingThere() {
-	cache := xfredigo.Wrap(s.conn)
-
-	var data arbitraryData
-	lastDelta, remaining, err := cache.Read(ctx, key, xfredigo.Msgpack(&data))
-	s.Assert().NoError(err)
-	s.Assert().Equal(0.0, lastDelta)
-	s.Assert().Equal(0.0, remaining)
-	s.Assert().Equal(arbitraryData{}, data)
+	s.Assert().Nil(err)
+	s.Assert().Nil(val)
 }
