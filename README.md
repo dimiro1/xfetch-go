@@ -55,6 +55,8 @@ fetcher := xf.NewFetcher(beta, recomputeOnCacheFailure)
 
 recomputer := func(ctx context.Context) (xf.Fetchable, time.Duration, error) {
     // ...
+    freshData := someCall()
+    return xfredigo.Struct(&freshData), time.Second, nil
 }
 
 var data arbitraryData
