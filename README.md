@@ -50,22 +50,37 @@ if err != nil {
 defer conn.Close()
 
 beta := 1.0
-recomputeOnCacheFailure := true
-fetcher := xf.NewFetcher(beta, recomputeOnCacheFailure)
+fetcher := xf.NewFetcher(beta)
+ttl := time.Hour
 
-recomputer := func(ctx context.Context) (xf.Fetchable, time.Duration, error) {
-    // ...
-    freshData := someCall()
-    return xfredigo.Struct(&freshData), time.Second, nil
-}
+cache := xfredigo.Wrap(conn)
 
-var data arbitraryData
-err := fetcher.Fetch(ctx, xfredigo.Wrap(conn), key, xfredigo.Struct(&data), recomputer)
+retrieval, err := fetcher.Get(ctx, cache, "HGETALL", "some_key")
 if err != nil {
-    // handle error
+   // handle err
 }
 
-fmt.Println(data.Something)
+if !retrieval.ShouldRefresh {
+    redisValue, err := redis.Values(retrieval.Value)
+    if err != nil {
+       // handle
+    }	
+    
+    var data arbitraryData
+    err = redis.ScanStruct(redisValue, &data)
+    if err != nil {
+       // handle
+    }
+    return data
+}
+
+start := time.Now()
+data := fetchData()
+delta := time.Since(start)
+err = fetcher.Put(ctx, cache, "HMSET", "some_key", ttl, delta, redis.Args{}.AddFlat(prsn)...)
+if err != nil {
+   // handle
+}
 ```
 
 ### With other caches/libraries
