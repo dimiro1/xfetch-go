@@ -85,7 +85,7 @@ if err != nil {
 
 ### With other caches/libraries
 
-Any caching library that implements the `Cache` and `Fetchable` interfaces can be used with this library.
+Any caching library that implements the `Cache` interface can be used with this library.
 
 Feel free to send a pull-request if you would like to use this library
 with any other cache or caching library.

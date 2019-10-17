@@ -17,14 +17,20 @@ type (
 	// Cache abstracts away cache operations. You can use any kind of cache
 	// or caching library to implement it.
 	Cache interface {
+		// Get retrieves a value at `key` using command `cmd`. It returns the value, the remaining ttl of the key,
+		// its delta, and any error.
 		Get(ctx context.Context, cmd, key string) (interface{}, float64, float64, error)
+
+		// Put puts the values at `args` at `key` using command `cmd`. It also sets its ttl and stores the delta.
 		Put(ctx context.Context, cmd, key string, ttl, delta time.Duration, args ...interface{}) error
 	}
 
-	// Fetcher reads the value of a given key from a cache and decides whether to recompute it.
-	// It returns whether a value has been retrieved (bool) and an error.
+	// Fetcher describes an X-Fetch client.
 	Fetcher interface {
+		// Get returns a value at `key` from the cache. It wraps it in a Retrieval and returns any error encountered.
 		Get(ctx context.Context, cache Cache, cmd, key string) (*Retrieval, error)
+
+		// Put delegates putting an object to the cache to the Cache implementation.
 		Put(ctx context.Context, cache Cache, cmd, key string, ttl, delta time.Duration, args ...interface{}) error
 	}
 
@@ -36,6 +42,7 @@ type (
 		randomizer func() float64
 	}
 
+	// Retrieval wraps a value and exposes whether you should refresh it.
 	Retrieval struct {
 		ShouldRefresh bool
 		Value         interface{}
