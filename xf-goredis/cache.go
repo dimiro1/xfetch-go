@@ -9,7 +9,7 @@ import (
 	"time"
 
 	xf "github.com/Onefootball/xfetch-go"
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 )
 
@@ -23,11 +23,11 @@ func Wrap(client redis.UniversalClient) xf.Cache {
 
 func (c cache) Get(ctx context.Context, cmd, key string) (interface{}, float64, float64, error) {
 	pipe := c.client.Pipeline()
-	readPipe := pipe.Do(cmd, key)
-	ttlPipe := pipe.Do("PTTL", key) // PTTL returns the time-to-live in milliseconds
-	deltaPipe := pipe.Get(fmt.Sprintf("%s:delta", key))
+	readPipe := pipe.Do(ctx, cmd, key)
+	ttlPipe := pipe.PTTL(ctx, key) // PTTL returns the time-to-live in milliseconds
+	deltaPipe := pipe.Get(ctx, fmt.Sprintf("%s:delta", key))
 
-	_, err := pipe.Exec()
+	_, err := pipe.Exec(ctx)
 	if err != nil {
 		return nil, 0, 0, errors.Wrap(err, "error on executing pipeline")
 	}
@@ -37,27 +37,22 @@ func (c cache) Get(ctx context.Context, cmd, key string) (interface{}, float64, 
 		return nil, 0, 0, errors.Wrap(err, "reading")
 	}
 
-	ttl, err := ttlPipe.Int64()
-	if err != nil {
-		return nil, 0, 0, errors.Wrap(err, "finding ttl")
-	}
-
 	delta, err := deltaPipe.Float64()
 	if err != nil {
 		return nil, 0, 0, errors.Wrap(err, "finding delta")
 	}
 
-	return value, float64(ttl) / 1000.0, delta, nil
+	return value, float64(ttlPipe.Val().Milliseconds()) / 1000.0, delta, nil
 }
 
 func (c cache) Put(ctx context.Context, cmd, key string, ttl, delta time.Duration, arguments ...interface{}) error {
 	pipe := c.client.Pipeline()
 
-	pipe.Do(cmd, args{key}.addFlat(arguments))
-	pipe.Expire(key, ttl)
-	pipe.MSet(fmt.Sprintf("%s:delta", key), delta.Seconds(), "EX", ttl)
+	pipe.Do(ctx, cmd, args{key}.addFlat(arguments), ttl)
+	pipe.Expire(ctx, key, ttl)
+	pipe.MSet(ctx, fmt.Sprintf("%s:delta", key), delta.Seconds(), "EX", ttl)
 
-	_, err := pipe.Exec()
+	_, err := pipe.Exec(ctx)
 	if err != nil {
 		return errors.Wrap(err, "sending exec")
 	}
