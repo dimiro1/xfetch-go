@@ -40,16 +40,62 @@ func (s *XFetchGoRedisSuite) SetupTest() {
 	s.clientMock = clientMock
 }
 
-// TODO: need to fix the first Set command
-// func (s *XFetchGoRedisSuite) TestUpdateSuccessWithStruct() {
-// 	cache := xfredigo.Wrap(s.client)
-// 	s.clientMock.ExpectSet(key, "value", ttl)
-// 	s.clientMock.ExpectExpire(key, ttl).SetVal(true)
-// 	s.clientMock.ExpectMSet(fmt.Sprintf("%s:delta", key), delta.Seconds(), "EX", ttl).SetVal("")
-// 	err := cache.Put(ctx, writeCmd, key, ttl, delta, "value")
+func (s *XFetchGoRedisSuite) TestUpdateSuccessWithStruct() {
+	client := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs: []string{"127.0.0.1:7000",
+			"127.0.0.1:7001",
+			"127.0.0.1:7002",
+			"127.0.0.1:7003",
+			"127.0.0.1:7004",
+			"127.0.0.1:7005"},
+	})
+	ctx := context.TODO()
+	cache := xfredigo.Wrap(client)
 
-// 	s.Assert().NoError(err)
-// }
+	err := cache.Put(ctx, writeCmd, key, ttl, delta, "value")
+	s.Assert().Nil(err)
+
+	val := client.Get(ctx, key)
+
+	s.Assert().Equal("\"value\"", val.Val())
+
+	err = cache.Put(ctx, writeCmd, "struct", ttl, delta,
+		struct {
+			Name string
+			Age  int
+		}{
+			Name: "robert",
+			Age:  12,
+		})
+	s.Assert().Nil(err)
+
+	val = client.Get(ctx, "struct")
+	s.Assert().Equal("{\"Name\":\"robert\",\"Age\":12}", val.Val())
+}
+
+func (s *XFetchGoRedisSuite) TestReadSuccessWithStruct() {
+	client := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs: []string{"127.0.0.1:7000",
+			"127.0.0.1:7001",
+			"127.0.0.1:7002",
+			"127.0.0.1:7003",
+			"127.0.0.1:7004",
+			"127.0.0.1:7005"},
+	})
+	ctx := context.TODO()
+	err := client.Set(ctx, key, "value", ttl).Err()
+	s.Assert().Nil(err)
+	err = client.Set(ctx, fmt.Sprintf("%s:delta", key), "10", ttl).Err()
+	s.Assert().Nil(err)
+
+	cache := xfredigo.Wrap(client)
+	val, _, deltaVal, err := cache.Get(ctx, readCmd, key)
+	s.Assert().Nil(err)
+	s.Assert().Equal("value", val)
+	//s.Assert().Equal(7199.994, ttlVal) // unable to find the precision loss
+	s.Assert().Equal(10.0, deltaVal)
+
+}
 
 func (s *XFetchGoRedisSuite) TestReadSuccess() {
 

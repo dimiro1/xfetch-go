@@ -2,6 +2,7 @@ package xfgoredis
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -46,18 +47,30 @@ func (c cache) Get(ctx context.Context, cmd, key string) (interface{}, float64, 
 }
 
 func (c cache) Put(ctx context.Context, cmd, key string, ttl, delta time.Duration, arguments ...interface{}) error {
+	if len(arguments) > 1 {
+		panic(errors.New("more than 1 args found"))
+	}
+
+	b, err := json.Marshal(arguments[0])
+	if err != nil {
+		return errors.New("unable to json marshal the arg")
+	}
+
 	pipe := c.client.Pipeline()
+	pipe.Set(ctx, key, b, ttl)
+	pipe.Set(ctx, fmt.Sprintf("%s:delta", key), delta.Seconds(), 0)
+	pipe.Set(ctx, "EX", ttl.Seconds(), 0)
 
-	pipe.Do(ctx, cmd, args{key}.addFlat(arguments), ttl)
-	pipe.Expire(ctx, key, ttl)
-	pipe.MSet(ctx, fmt.Sprintf("%s:delta", key), delta.Seconds(), "EX", ttl)
-
-	_, err := pipe.Exec(ctx)
+	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return errors.Wrap(err, "sending exec")
 	}
 
 	return nil
+}
+
+func (a args) MarshalBinary() ([]byte, error) {
+	return json.Marshal(a)
 }
 
 type fieldSpec struct {
