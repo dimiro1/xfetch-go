@@ -14,6 +14,7 @@ type cache struct {
 	client redis.UniversalClient
 }
 
+// Wrap wraps a goredis Client and allows it to implement the Cache interface
 func Wrap(client redis.UniversalClient) xf.Cache {
 	return cache{client: client}
 }
