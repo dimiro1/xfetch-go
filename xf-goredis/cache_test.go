@@ -2,14 +2,13 @@ package xfgoredis_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
 
-	xfredigo "github.com/Onefootball/xfetch-go/xf-goredis"
+	xfgoredis "github.com/Onefootball/xfetch-go/xf-goredis"
+	"github.com/alicebob/miniredis"
 	"github.com/go-redis/redis/v8"
-	"github.com/go-redis/redismock/v8"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -26,116 +25,104 @@ var ctx = context.Background()
 type XFetchGoRedisSuite struct {
 	suite.Suite
 
-	client     *redis.Client
-	clientMock redismock.ClientMock
+	client *redis.Client
+	server *miniredis.Miniredis
 }
 
 func TestXFetchRedigoSuite(t *testing.T) {
 	suite.Run(t, &XFetchGoRedisSuite{})
 }
 
-func (s *XFetchGoRedisSuite) SetupTest() {
-	client, clientMock := redismock.NewClientMock()
-	s.client = client
-	s.clientMock = clientMock
+func (s *XFetchGoRedisSuite) SetupSuite() {
+	server, err := miniredis.Run()
+	s.Require().NoError(err)
+	s.server = server
 }
 
-func (s *XFetchGoRedisSuite) TestUpdateSuccessWithStruct() {
-	client := redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs: []string{"127.0.0.1:7000",
-			"127.0.0.1:7001",
-			"127.0.0.1:7002",
-			"127.0.0.1:7003",
-			"127.0.0.1:7004",
-			"127.0.0.1:7005"},
+func (s *XFetchGoRedisSuite) TearDownSuite() {
+	s.server.Close()
+}
+
+func (s *XFetchGoRedisSuite) SetupTest() {
+	client := redis.NewClient(&redis.Options{
+		Addr: s.server.Addr(),
 	})
-	ctx := context.TODO()
-	cache := xfredigo.Wrap(client)
+	s.client = client
+}
+
+func (s *XFetchGoRedisSuite) TearDownTest() {
+	s.server.FlushAll()
+	defer s.client.Close()
+}
+
+func (s *XFetchGoRedisSuite) TestPut() {
+	cache := xfgoredis.Wrap(s.client)
 
 	err := cache.Put(ctx, writeCmd, key, ttl, delta, "value")
 	s.Assert().Nil(err)
 
-	val := client.Get(ctx, key)
+	getValue, err := s.server.Get(key)
+	s.Require().NoError(err)
+	s.Assert().Equal("value", getValue)
 
-	s.Assert().Equal("\"value\"", val.Val())
-
-	err = cache.Put(ctx, writeCmd, "struct", ttl, delta,
-		struct {
-			Name string
-			Age  int
-		}{
-			Name: "robert",
-			Age:  12,
-		})
-	s.Assert().Nil(err)
-
-	val = client.Get(ctx, "struct")
-	s.Assert().Equal("{\"Name\":\"robert\",\"Age\":12}", val.Val())
+	d, _ := s.server.Get(key + ":delta")
+	s.Assert().Equal("1", d)
+	s.Assert().Equal(ttl, s.server.TTL(key))
 }
 
-func (s *XFetchGoRedisSuite) TestReadSuccessWithStruct() {
-	client := redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs: []string{"127.0.0.1:7000",
-			"127.0.0.1:7001",
-			"127.0.0.1:7002",
-			"127.0.0.1:7003",
-			"127.0.0.1:7004",
-			"127.0.0.1:7005"},
-	})
-	ctx := context.TODO()
-	err := client.Set(ctx, key, "value", ttl).Err()
-	s.Assert().Nil(err)
-	err = client.Set(ctx, fmt.Sprintf("%s:delta", key), "10", ttl).Err()
-	s.Assert().Nil(err)
+func (s *XFetchGoRedisSuite) TestPutWithMoreThanOneArg() {
+	cache := xfgoredis.Wrap(s.client)
 
-	cache := xfredigo.Wrap(client)
-	val, _, deltaVal, err := cache.Get(ctx, readCmd, key)
-	s.Assert().Nil(err)
-	s.Assert().Equal("value", val)
-	//s.Assert().Equal(7199.994, ttlVal) // unable to find the precision loss
-	s.Assert().Equal(10.0, deltaVal)
-
+	err := cache.Put(ctx, writeCmd, key, ttl, delta, "value1", "value2")
+	s.Assert().EqualError(err, "length of args was not 1")
 }
 
 func (s *XFetchGoRedisSuite) TestReadSuccess() {
+	s.server.Set(key, "value")
+	ttl := 2 * time.Hour
+	s.server.SetTTL(key, ttl)
+	deltaKey := key + ":delta"
+	err := s.server.Set(deltaKey, "10")
+	s.Require().NoError(err)
+	s.server.SetTTL(deltaKey, ttl)
 
-	cache := xfredigo.Wrap(s.client)
-	s.clientMock.ExpectGet(key).SetVal("value")
-	s.clientMock.ExpectPTTL(key).SetVal(ttl)
-	s.clientMock.ExpectGet(fmt.Sprintf("%s:delta", key)).SetVal("10")
+	cache := xfgoredis.Wrap(s.client)
+
 	val, remaining, lastDelta, err := cache.Get(ctx, readCmd, key)
-
 	s.Assert().Equal(10.0, lastDelta)
 	s.Assert().Equal(7200.0, remaining)
 	s.Assert().NoError(err)
+
 	parsedVal := fmt.Sprintf("%v", val)
+	s.Require().NoError(err)
 	s.Assert().Equal("value", parsedVal)
 }
 
-func (s *XFetchGoRedisSuite) TestGetWhenGetKeyFails() {
+func (s *XFetchGoRedisSuite) TestReadSuccessWithStructWhenNothingThere() {
+	cache := xfgoredis.Wrap(s.client)
 
-	cache := xfredigo.Wrap(s.client)
-	s.clientMock.ExpectGet(key).SetErr(errors.New("error occured"))
-	s.clientMock.ExpectPTTL(key).SetVal(ttl)
-	s.clientMock.ExpectGet(fmt.Sprintf("%s:delta", key)).SetVal("10")
 	val, remaining, lastDelta, err := cache.Get(ctx, readCmd, key)
-
 	s.Assert().Equal(0.0, lastDelta)
 	s.Assert().Equal(0.0, remaining)
-	s.Assert().EqualError(err, "error on executing pipeline: error occured")
+	s.Assert().Equal(err.Error(), "error on executing pipeline: redis: nil")
 	s.Assert().Nil(val)
 }
 
 func (s *XFetchGoRedisSuite) TestGetWhenGetDeltaFails() {
+	s.server.Set(key, "value")
+	ttl := 2 * time.Hour
+	s.server.SetTTL(key, ttl)
+	deltaKey := key + ":delta"
+	err := s.server.Set(deltaKey, "a10")
+	s.Require().NoError(err)
+	s.server.SetTTL(deltaKey, ttl)
 
-	cache := xfredigo.Wrap(s.client)
-	s.clientMock.ExpectGet(key).SetVal("value")
-	s.clientMock.ExpectPTTL(key).SetVal(ttl)
-	s.clientMock.ExpectGet(fmt.Sprintf("%s:delta", key)).SetVal("1a0")
+	cache := xfgoredis.Wrap(s.client)
+
 	val, remaining, lastDelta, err := cache.Get(ctx, readCmd, key)
-
 	s.Assert().Equal(0.0, lastDelta)
 	s.Assert().Equal(0.0, remaining)
-	s.Assert().EqualError(err, "finding delta: strconv.ParseFloat: parsing \"1a0\": invalid syntax")
+	s.Assert().EqualError(err, "finding delta: strconv.ParseFloat: parsing \"a10\": invalid syntax")
+
 	s.Assert().Nil(val)
 }
