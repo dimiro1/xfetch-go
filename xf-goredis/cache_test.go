@@ -98,13 +98,29 @@ func (s *XFetchGoRedisSuite) TestReadSuccess() {
 	s.Assert().Equal("value", parsedVal)
 }
 
-func (s *XFetchGoRedisSuite) TestReadSuccessWithStructWhenNothingThere() {
+// skipping assertion for ttl as it return -2, if the key does not exist.
+func (s *XFetchGoRedisSuite) TestReadWithNoKey() {
+	ttl := 2 * time.Hour
+	deltaKey := key + ":delta"
+	err := s.server.Set(deltaKey, "10")
+	s.Require().NoError(err)
+	s.server.SetTTL(deltaKey, ttl)
+
+	cache := xfgoredis.Wrap(s.client)
+
+	val, _, lastDelta, err := cache.Get(ctx, readCmd, key)
+	s.Assert().Equal(10.0, lastDelta)
+	s.Assert().NoError(err)
+	s.Assert().Nil(val)
+}
+
+func (s *XFetchGoRedisSuite) TestReadWhenNothingIsThere() {
 	cache := xfgoredis.Wrap(s.client)
 
 	val, remaining, lastDelta, err := cache.Get(ctx, readCmd, key)
 	s.Assert().Equal(0.0, lastDelta)
 	s.Assert().Equal(0.0, remaining)
-	s.Assert().Equal(err.Error(), "error on executing pipeline: redis: nil")
+	s.Assert().NoError(err)
 	s.Assert().Nil(val)
 }
 

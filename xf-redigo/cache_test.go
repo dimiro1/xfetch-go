@@ -98,3 +98,19 @@ func (s *XFetchRedigoSuite) TestReadSuccessWithStructWhenNothingThere() {
 	s.Assert().Nil(err)
 	s.Assert().Nil(val)
 }
+
+// skipping assertion for ttl as it return -2, if the key does not exist.
+func (s *XFetchRedigoSuite) TestReadWithMissingKeyInCache() {
+	ttl := 2 * time.Hour
+	deltaKey := key + ":delta"
+	err := s.server.Set(deltaKey, "10")
+	s.Require().NoError(err)
+	s.server.SetTTL(deltaKey, ttl)
+
+	cache := xfredigo.Wrap(s.conn)
+
+	val, _, lastDelta, err := cache.Get(ctx, readCmd, key)
+	s.Assert().Equal(10.0, lastDelta)
+	s.Assert().Nil(err)
+	s.Assert().Nil(val)
+}
