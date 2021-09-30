@@ -42,7 +42,7 @@ func (c cache) Get(ctx context.Context, cmd, key string) (interface{}, float64, 
 
 	ttl, err := ttlPipe.Int64()
 	if err != nil {
-		return nil, 0, 0, errors.Wrap(err, "reading")
+		return nil, 0, 0, errors.Wrap(err, "finding ttl")
 	}
 	delta, err := deltaPipe.Float64()
 	if err != nil {
