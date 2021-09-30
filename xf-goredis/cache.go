@@ -27,17 +27,18 @@ func (c cache) Get(ctx context.Context, cmd, key string) (interface{}, float64, 
 
 	_, err := pipe.Exec(ctx)
 	if err != nil {
-		if err != redis.Nil {
-			return nil, 0, 0, errors.Wrap(err, "error on executing pipeline")
+		if err == redis.Nil {
+			return nil, 0, 0, nil
 		}
+		return nil, 0, 0, errors.Wrap(err, "error on executing pipeline")
 	}
 
 	value, err := readPipe.Result()
 	if err != nil {
-		if err != redis.Nil {
-			return nil, 0, 0, errors.Wrap(err, "reading")
+		if err == redis.Nil {
+			return nil, 0, 0, nil
 		}
-		value = nil
+		return nil, 0, 0, errors.Wrap(err, "reading")
 	}
 
 	ttl, err := ttlPipe.Int64()

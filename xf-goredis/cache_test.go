@@ -98,7 +98,6 @@ func (s *XFetchGoRedisSuite) TestReadSuccess() {
 	s.Assert().Equal("value", parsedVal)
 }
 
-// skipping assertion for ttl as it return -2, if the key does not exist.
 func (s *XFetchGoRedisSuite) TestReadWithNoKey() {
 	ttl := 2 * time.Hour
 	deltaKey := key + ":delta"
@@ -108,8 +107,9 @@ func (s *XFetchGoRedisSuite) TestReadWithNoKey() {
 
 	cache := xfgoredis.Wrap(s.client)
 
-	val, _, lastDelta, err := cache.Get(ctx, readCmd, key)
-	s.Assert().Equal(10.0, lastDelta)
+	val, remaining, lastDelta, err := cache.Get(ctx, readCmd, key)
+	s.Assert().Equal(0.0, lastDelta)
+	s.Assert().Equal(0.0, remaining)
 	s.Assert().NoError(err)
 	s.Assert().Nil(val)
 }
