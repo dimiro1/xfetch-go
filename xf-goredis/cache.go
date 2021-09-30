@@ -22,25 +22,38 @@ func Wrap(client redis.UniversalClient) xf.Cache {
 func (c cache) Get(ctx context.Context, cmd, key string) (interface{}, float64, float64, error) {
 	pipe := c.client.Pipeline()
 	readPipe := pipe.Do(ctx, cmd, key)
-	ttlPipe := pipe.PTTL(ctx, key) // PTTL returns the time-to-live in milliseconds
+	ttlPipe := pipe.Do(ctx, "pttl", key) // PTTL returns the time-to-live in milliseconds
 	deltaPipe := pipe.Get(ctx, fmt.Sprintf("%s:delta", key))
 
 	_, err := pipe.Exec(ctx)
 	if err != nil {
+		if err == redis.Nil {
+			return nil, 0, 0, nil
+		}
 		return nil, 0, 0, errors.Wrap(err, "error on executing pipeline")
 	}
 
 	value, err := readPipe.Result()
 	if err != nil {
+		if err == redis.Nil {
+			return nil, 0, 0, nil
+		}
 		return nil, 0, 0, errors.Wrap(err, "reading")
 	}
 
+	ttl, err := ttlPipe.Int64()
+	if err != nil {
+		return nil, 0, 0, errors.Wrap(err, "finding ttl")
+	}
 	delta, err := deltaPipe.Float64()
 	if err != nil {
+		if err == redis.Nil {
+			return nil, 0, 0, nil
+		}
 		return nil, 0, 0, errors.Wrap(err, "finding delta")
 	}
 
-	return value, float64(ttlPipe.Val().Milliseconds()) / 1000.0, delta, nil
+	return value, float64(ttl) / 1000.0, delta, nil
 }
 
 func (c cache) Put(ctx context.Context, cmd, key string, ttl, delta time.Duration, arguments ...interface{}) error {
